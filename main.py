@@ -41,13 +41,14 @@ aoi = load_study_area()
 
 # Date for data retrieval
 date = '2021-01-01'
+date2 = '2021-01-01'
 
 # Filter Image for desired date
-collectionModEvi_terra = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(date, date) \
+collectionModEvi_terra = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(date, date2) \
     .filterBounds(aoi)\
     .select('EVI')
 
-collectionModEvi_aqua = ee.ImageCollection('MODIS/061/MYD13Q1').filterDate(date, date) \
+collectionModEvi_aqua = ee.ImageCollection('MODIS/061/MYD13Q1').filterDate(date, date2) \
     .filterBounds(aoi)\
     .select('EVI')
 
