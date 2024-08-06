@@ -1,69 +1,78 @@
-import streamlit as st
+# Import necessary libraries
 import ee
-import json
+import geemap
+import os
 import requests
-import geopandas as gpd
-import geemap.foliumap as geemap
-from datetime import datetime
 
-# Initialize Earth Engine
-@st.cache_resource
-def initialize_earth_engine():
-    json_data = st.secrets["json_data"]
-    
-    if json_data is None:
-        raise ValueError("json_data is None")
-    
-    json_data_dict = dict(json_data)
-    json_data_str = json.dumps(json_data_dict)
-    
-    if not isinstance(json_data_str, str):
-        raise TypeError(f"json_data must be str, but got {type(json_data_str)}")
-    
-    print(f"json_data_str type: {type(json_data_str)}")
-    print(f"json_data_str content: {json_data_str[:100]}...")
-    
-    json_object = json.loads(json_data_str, strict=False)
-    service_account = json_object['client_email']
-    
-    credentials = ee.ServiceAccountCredentials(service_account, key_data=json_data_str)
-    ee.Initialize(credentials)
+# Function to download an image from Google Earth Engine
+def download_ee_image(collection_id, bands, polygon, file_path, scale=30, dateMin='2020-01-01', dateMax='2020-12-31'):
+    try:
+        # Initialize the Earth Engine API
+        ee.Initialize()
 
-initialize_earth_engine()
+        # Define the Area of Interest (AOI)
+        aoi = ee.Geometry.Polygon(polygon)
 
-# Load study area from GeoJSON file
-@st.cache_resource
-def load_study_area():
-    gdf = gpd.read_file('study_area.geojson')
-    return geemap.geopandas_to_ee(gdf)
+        # Filter the image collection
+        collection = ee.ImageCollection(collection_id) \
+            .filterDate(dateMin, dateMax) \
+            .filterBounds(aoi) \
+            .select(bands)
 
-aoi = load_study_area()
+        # Get the first image from the collection
+        image = collection.median()
 
-# Date for data retrieval
-date = '2021-01-01'
-date2 = '2021-01-02'
+        if len(bands) == 1:
+            # Visualize single band without palette
+            vis_params = {
+                'bands': bands[0],
+                'min': 0,
+                'max': 3000
+            }
+        else:
+            # Visualize RGB bands
+            vis_params = {
+                'bands': bands,
+                'min': 0,
+                'max': 3000
+            }
 
-# Filter Image for desired date
-collectionModEvi_terra = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(date, date2) \
-    .filterBounds(aoi)\
-    .select('EVI')
+        # Get the download URL
+        url = image.visualize(**vis_params).getDownloadURL({
+            'scale': scale,
+            'crs': 'EPSG:4326',
+            'region': aoi,
+            'format': 'GEO_TIFF'
+        })
 
-collectionModEvi_aqua = ee.ImageCollection('MODIS/061/MYD13Q1').filterDate(date, date2) \
-    .filterBounds(aoi)\
-    .select('EVI')
+        # Download the image
+        response = requests.get(url, stream=True)
+        with open(file_path, "wb") as fd:
+            for chunk in response.iter_content(chunk_size=1024):
+                fd.write(chunk)
 
-collectionModEvi = collectionModEvi_terra.merge(collectionModEvi_aqua)
+        print(f"Image downloaded successfully and saved to {file_path}")
 
-# Visualize the data
-st.title("MODIS EVI Data Visualization")
-st.write(f"Displaying MODIS EVI data for {date}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
-map_ = geemap.Map()
-map_.addLayer(aoi, {}, "Study Area")
+if __name__ == "__main__":
+    import streamlit as st
 
-# Add each image in the collection to the map
-for image in collectionModEvi.toList(collectionModEvi.size()).getInfo():
-    img = ee.Image(image['id'])
-    map_.addLayer(img, {"min": 0, "max": 8000, "palette": ['red', 'yellow', 'green']}, image['id'])
+    # Define the polygon (example coordinates, replace with your own)
+    polygon = [[[85.3240, 27.7172], [85.3240, 27.7272], [85.3340, 27.7272], [85.3340, 27.7172], [85.3240, 27.7172]]]
 
-map_.to_streamlit()
+    # Selected datasets (example condition, replace with your own logic)
+    selected_datasets = ["Satellite"]
+
+    # Streamlit status text and progress bar
+    status_text = st.empty()
+    progress = st.progress(0)
+
+    if "Satellite" in selected_datasets:
+        status_text.text("Downloading satellite data...")
+        satellite_file = 'data/output/satellite/satellite_image.tif'
+        os.makedirs('data/output/satellite', exist_ok=True)
+        download_ee_image('COPERNICUS/S2_SR_HARMONIZED', ['B4', 'B3', 'B2'], polygon, satellite_file, scale=30, dateMin='2020-04-01', dateMax='2020-04-30')
+        st.write("Satellite data downloaded for the selected area.")
+        progress.progress(0.9)
