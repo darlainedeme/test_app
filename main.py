@@ -41,7 +41,7 @@ aoi = load_study_area()
 
 # Date for data retrieval
 date = '2021-01-01'
-date2 = '2021-01-01'
+date2 = '2021-01-02'
 
 # Filter Image for desired date
 collectionModEvi_terra = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(date, date2) \
